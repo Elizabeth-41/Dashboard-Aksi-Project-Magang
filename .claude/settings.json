@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(php -v)",
+      "Bash(composer -V)",
+      "Bash(composer require *)",
+      "Bash(php artisan *)",
+      "Bash(composer show *)",
+      "Bash(grep -v \"^\\\\s*$\")",
+      "Bash(mkdir -p app/Enums)",
+      "Bash(rm app/UserRole.php app/AllowedUserStatus.php app/Dimensi.php app/JenisKeluaran.php app/Kategori.php app/StatusKegiatan.php app/StatusVerifikasi.php)",
+      "Bash(php -r '$f=fopen\\(\"database/seed-data/rencana-aksi-seed-data.csv\",\"r\"\\);$h=fgetcsv\\($f\\);$max=[];$n=0;while\\($r=fgetcsv\\($f\\)\\){$n++;foreach\\($h as $i=>$k\\){$max[$k]=max\\($max[$k]??0,mb_strlen\\($r[$i]\\)\\);}}echo \"rows=$n\\\\n\";print_r\\($max\\);')",
+      "Bash(vendor/bin/pint --dirty --format agent)",
+      "Bash(vendor/bin/pint --format agent app database tests)",
+      "Bash(git --version)",
+      "Bash(grep -v \"^$\")",
+      "Bash(vendor/bin/pint --format agent app database tests routes config bootstrap lang)",
+      "Bash(vendor/bin/pint --format agent tests)",
+      "Bash(php -r '$f=fopen\\(\"database/seed-data/rencana-aksi-seed-data.csv\",\"r\"\\);$h=fgetcsv\\($f,escape:\"\"\\);$k=[];while\\($r=fgetcsv\\($f,escape:\"\"\\)\\){$r=array_combine\\($h,$r\\);$key=$r[\"leading_sector_slug\"].\"|\".$r[\"dimensi\"].\"|\".$r[\"judul\"];$k[$key]=\\($k[$key]??0\\)+1;}echo \"unique keys: \",count\\($k\\),\"\\\\n\";foreach\\($k as $key=>$n\\){if\\($n>1\\)echo \"DUP: $key x$n\\\\n\";}')",
+      "Bash(php -r '$f=fopen\\(\"database/seed-data/rencana-aksi-seed-data.csv\",\"r\"\\);$h=fgetcsv\\($f,escape:\"\"\\);$v=[];while\\($r=fgetcsv\\($f,escape:\"\"\\)\\){$r=array_combine\\($h,$r\\);foreach\\([\"dimensi\",\"jenis_keluaran\",\"kategori\"] as $c\\){$v[$c][$r[$c]]=1;}}print_r\\(array_map\\(\"array_keys\",$v\\)\\);')",
+      "Bash(tee -a .env)",
+      "Bash(vendor/bin/pint --format agent app database tests routes config lang)",
+      "Bash(grep -n '^        $this->\\\\\\(get\\\\|post\\\\|patch\\\\|delete\\\\\\)Json\\\\|^        $this->get\\(' tests/Feature/Admin/DinasControllerTest.php tests/Feature/Admin/RencanaAksiControllerTest.php tests/Feature/Api/BuktiDukungControllerTest.php tests/Feature/Api/RencanaAksiControllerTest.php tests/Feature/Api/RencanaAksiBuktiControllerTest.php tests/Feature/Admin/AllowedUserControllerTest.php)",
+      "Bash(grep -n '$this->\\\\\\(get\\\\|post\\\\|patch\\\\|delete\\\\\\)Json\\(\\\\|$this->get\\(' tests/Feature/Admin/DinasControllerTest.php tests/Feature/Admin/RencanaAksiControllerTest.php tests/Feature/Api/BuktiDukungControllerTest.php tests/Feature/Api/RencanaAksiBuktiControllerTest.php tests/Feature/Admin/AllowedUserControllerTest.php tests/Feature/Api/RencanaAksiControllerTest.php)"
+    ]
+  }
+}
+

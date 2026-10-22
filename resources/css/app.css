@@ -1,0 +1,40 @@
+@import 'tailwindcss';
+
+@source '../js/**/*.{js,jsx}';
+
+/*
+ * Palet "Kota Seribu Sungai": biru sungai + emas sasirangan, diambil dari
+ * prototype dashboard-rencana-aksi-banjarmasin.jsx.
+ */
+@theme {
+    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+        'Segoe UI Symbol', 'Noto Color Emoji';
+
+    --color-deep: #0b3b4d;
+    --color-river: #136477;
+    --color-river-light: #1e8fa3;
+    --color-gold: #c99a3c;
+    --color-gold-soft: #e7c877;
+    --color-ink: #1b2a2f;
+    --color-sub: #5b6b70;
+    --color-line: #e3e8e9;
+    --color-canvas: #f4f6f7;
+    --color-success: #2e7d5b;
+    --color-success-soft: #e7f3ec;
+    --color-warning-soft: #fcf2e0;
+    --color-danger: #b3401c;
+    --color-danger-soft: #fbeae3;
+    --color-river-soft: #eaf2f3;
+}
+
+html {
+    background-color: var(--color-canvas);
+}
+
+/* Fokus keyboard yang konsisten untuk elemen interaktif. */
+@layer base {
+    :focus-visible {
+        outline: 2px solid var(--color-river-light);
+        outline-offset: 2px;
+    }
+}
