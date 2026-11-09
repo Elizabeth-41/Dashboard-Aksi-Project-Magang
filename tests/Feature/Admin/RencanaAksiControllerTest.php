@@ -4,9 +4,14 @@ namespace Tests\Feature\Admin;
 
 use App\Enums\Dimensi;
 use App\Enums\StatusKegiatan;
+use App\Imports\RencanaAksiImport;
+use App\Models\BuktiDukung;
 use App\Models\Dinas;
 use App\Models\RencanaAksi;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 use Tests\Concerns\CreatesWhitelistedUsers;
 use Tests\TestCase;
 
@@ -97,5 +102,175 @@ class RencanaAksiControllerTest extends TestCase
         $this->assertSame([2024], $fresh->tahun_pelaksanaan);
         $this->assertSame(StatusKegiatan::Selesai, $fresh->status);
         $this->assertSame(Dimensi::Economy, $fresh->dimensi);
+    }
+
+    public function test_admin_pusat_can_delete_activity_and_cascade_its_related_data(): void
+    {
+        Storage::fake('local');
+        $admin = $this->adminPusatUser();
+        $rencana = RencanaAksi::factory()->create();
+        $bukti = BuktiDukung::factory()->for($rencana)->create(['path_file' => 'bukti/hapus.pdf']);
+        Storage::disk('local')->put($bukti->path_file, 'isi');
+
+        $this->actingAs($admin)->deleteJson("/api/admin/rencana-aksi/{$rencana->uuid}")
+            ->assertOk()
+            ->assertJsonPath('message', 'Kegiatan dan seluruh bukti pendukungnya berhasil dihapus.');
+
+        $this->assertDatabaseMissing('rencana_aksi', ['id' => $rencana->id]);
+        $this->assertDatabaseMissing('bukti_dukung', ['id' => $bukti->id]);
+        Storage::disk('local')->assertMissing($bukti->path_file);
+    }
+
+    public function test_non_admin_cannot_delete_activity(): void
+    {
+        $rencana = RencanaAksi::factory()->create();
+
+        $this->actingAs($this->unitUser())
+            ->deleteJson("/api/admin/rencana-aksi/{$rencana->uuid}")
+            ->assertForbidden();
+
+        $this->assertDatabaseHas('rencana_aksi', ['id' => $rencana->id]);
+    }
+
+    public function test_admin_pusat_can_import_multiple_rencana_aksi_rows(): void
+    {
+        $admin = $this->adminPusatUser();
+        $dinas = Dinas::factory()->create();
+        $import = new RencanaAksiImport($admin->id);
+
+        $import->collection(new Collection([
+            [
+                'dinas_id' => $dinas->id,
+                'judul' => 'Kegiatan hasil import',
+                'program' => 'Program digital',
+                'dimensi' => 'Smart Governance',
+                'jenis_keluaran' => 'aplikasi',
+                'kategori' => 'tik',
+                'status' => 'berjalan',
+                'perlu_verifikasi' => 1,
+                'tahun_pelaksanaan' => '2025,2027',
+            ],
+        ]));
+
+        $this->assertSame(1, $import->jumlahDiimpor());
+        $this->assertDatabaseHas('rencana_aksi', [
+            'dinas_id' => $dinas->id,
+            'judul' => 'Kegiatan hasil import',
+            'tahun_label' => '2025 & 2027',
+            'status' => 'berjalan',
+            'created_by' => $admin->id,
+        ]);
+    }
+
+    public function test_import_maps_numeric_excel_columns_in_template_order(): void
+    {
+        $admin = $this->adminPusatUser();
+        $dinas = Dinas::factory()->create();
+        $import = new RencanaAksiImport($admin->id);
+
+        $import->collection(new Collection([
+            [
+                $dinas->id,
+                'Kegiatan dengan kolom Excel',
+                'Program contoh',
+                'Smart Governance',
+                'aplikasi',
+                'tik',
+                'belum_mulai',
+                1,
+                '2025,2026',
+            ],
+        ]));
+
+        $this->assertSame(1, $import->jumlahDiimpor());
+        $this->assertDatabaseHas('rencana_aksi', [
+            'judul' => 'Kegiatan dengan kolom Excel',
+            'dimensi' => 'Smart Governance',
+        ]);
+    }
+
+    public function test_import_rejects_an_activity_that_already_exists(): void
+    {
+        $admin = $this->adminPusatUser();
+        $rencana = RencanaAksi::factory()->tahun([2025, 2026])->create([
+            'judul' => 'Kegiatan yang sudah ada',
+        ]);
+        $import = new RencanaAksiImport($admin->id);
+
+        $this->expectException(ValidationException::class);
+        $this->expectExceptionMessage('Baris 2: Kegiatan "Kegiatan yang sudah ada" untuk unit ID '.$rencana->dinas_id.' pada tahun 2025, 2026 sudah ada. Hapus atau perbaiki baris ini di file Excel, lalu impor ulang.');
+
+        $import->collection(new Collection([[
+            'dinas_id' => $rencana->dinas_id,
+            'judul' => $rencana->judul,
+            'dimensi' => 'Smart Governance',
+            'jenis_keluaran' => 'aplikasi',
+            'kategori' => 'tik',
+            'tahun_pelaksanaan' => '2025,2026',
+        ]]));
+    }
+
+    public function test_import_is_atomic_when_a_row_is_invalid(): void
+    {
+        $admin = $this->adminPusatUser();
+        $dinas = Dinas::factory()->create();
+        $import = new RencanaAksiImport($admin->id);
+
+        $this->expectException(ValidationException::class);
+
+        try {
+            $import->collection(new Collection([
+                [
+                    'dinas_id' => $dinas->id,
+                    'judul' => 'Baris valid',
+                    'dimensi' => 'Smart Governance',
+                    'jenis_keluaran' => 'aplikasi',
+                    'kategori' => 'tik',
+                    'tahun_pelaksanaan' => '2025',
+                ],
+                [
+                    'dinas_id' => 999999,
+                    'judul' => 'Baris tidak valid',
+                    'dimensi' => 'Smart Governance',
+                    'jenis_keluaran' => 'aplikasi',
+                    'kategori' => 'tik',
+                    'tahun_pelaksanaan' => '2025',
+                ],
+            ]));
+        } finally {
+            $this->assertDatabaseMissing('rencana_aksi', ['judul' => 'Baris valid']);
+        }
+    }
+
+    public function test_import_ignores_blank_rows_after_the_last_activity(): void
+    {
+        $admin = $this->adminPusatUser();
+        $dinas = Dinas::factory()->create();
+        $import = new RencanaAksiImport($admin->id);
+
+        $import->collection(new Collection([
+            [
+                'dinas_id' => $dinas->id,
+                'judul' => 'Kegiatan terakhir',
+                'dimensi' => 'Smart Governance',
+                'jenis_keluaran' => 'aplikasi',
+                'kategori' => 'tik',
+                'tahun_pelaksanaan' => '2025',
+            ],
+            [
+                'dinas_id' => null,
+                'judul' => null,
+                'program' => null,
+                'dimensi' => null,
+                'jenis_keluaran' => null,
+                'kategori' => null,
+                'status' => null,
+                'perlu_verifikasi' => null,
+                'tahun_pelaksanaan' => null,
+            ],
+        ]));
+
+        $this->assertSame(1, $import->jumlahDiimpor());
+        $this->assertDatabaseCount('rencana_aksi', 1);
     }
 }

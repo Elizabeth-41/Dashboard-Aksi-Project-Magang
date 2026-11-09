@@ -38,6 +38,8 @@ class UpdateRencanaAksiRequest extends FormRequest
             'tahun_label' => ['sometimes', 'nullable', 'string', 'max:50'],
             'status' => ['sometimes', 'required', Rule::enum(StatusKegiatan::class)],
             'perlu_verifikasi' => ['sometimes', 'boolean'],
+            'quick_win_tahun' => ['sometimes', 'array'],
+            'quick_win_tahun.*' => ['integer', 'min:2000', 'max:2100', 'distinct'],
         ];
     }
 
@@ -66,6 +68,10 @@ class UpdateRencanaAksiRequest extends FormRequest
 
         if ($this->has('perlu_verifikasi')) {
             $payload['perlu_verifikasi'] = $this->boolean('perlu_verifikasi');
+        }
+
+        if ($this->has('quick_win_tahun')) {
+            $payload['quick_win_tahun'] = array_values(array_map('intval', $this->validated('quick_win_tahun')));
         }
 
         return $payload;

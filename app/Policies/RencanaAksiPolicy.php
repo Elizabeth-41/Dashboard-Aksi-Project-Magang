@@ -28,6 +28,14 @@ class RencanaAksiPolicy
     }
 
     /**
+     * Hapus kegiatan dan seluruh bukti pendukungnya: khusus Admin Pusat.
+     */
+    public function delete(User $user, RencanaAksi $rencanaAksi): bool
+    {
+        return $user->isAdminPusat();
+    }
+
+    /**
      * Ubah status kegiatan secara manual: Unit pemilik atau Admin Pusat.
      */
     public function updateStatus(User $user, RencanaAksi $rencanaAksi): bool

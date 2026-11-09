@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Cell, Pie, PieChart, RadialBar, RadialBarChart, ResponsiveContainer, Tooltip } from 'recharts';
-import { Building2, CalendarDays, ChevronRight, FileCheck2, ListChecks } from 'lucide-react';
+import { Building2, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, FileCheck2, ListChecks } from 'lucide-react';
 import api, { ambilSemua } from '../lib/api';
 import { DIMENSI, useDaftarTahun } from '../lib/pilihan';
 import { Alert, Card, EmptyState, MultiSelectTahun, ProgressBar, Spinner } from '../components/ui';
@@ -23,6 +23,128 @@ function StatCard({ label, nilai, keterangan, ikon: Ikon }) {
     );
 }
 
+function QuickWinSection({ quickWins }) {
+    const dimensiTersedia = useMemo(() => DIMENSI.filter((dimensi) => quickWins.some((quickWin) => quickWin.dimensi === dimensi)), [quickWins]);
+    const [dimensiAktif, setDimensiAktif] = useState(dimensiTersedia[0] ?? '');
+    const [indeks, setIndeks] = useState(0);
+    const quickWinsDimensi = useMemo(() => quickWins.filter((quickWin) => quickWin.dimensi === dimensiAktif), [quickWins, dimensiAktif]);
+    const slides = useMemo(
+        () =>
+            quickWinsDimensi.flatMap((quickWin) =>
+                quickWin.bukti.map((bukti) => ({
+                    ...quickWin,
+                    bukti,
+                })),
+            ),
+        [quickWinsDimensi],
+    );
+    const slide = slides[indeks] ?? slides[0];
+    const [gambarTerlihat, setGambarTerlihat] = useState(true);
+
+    useEffect(() => {
+        if (!dimensiTersedia.includes(dimensiAktif)) {
+            setDimensiAktif(dimensiTersedia[0] ?? '');
+        }
+    }, [dimensiAktif, dimensiTersedia]);
+
+    useEffect(() => {
+        setIndeks(0);
+    }, [dimensiAktif]);
+
+    useEffect(() => {
+        setGambarTerlihat(false);
+        const frame = window.requestAnimationFrame(() => setGambarTerlihat(true));
+
+        return () => window.cancelAnimationFrame(frame);
+    }, [slide?.bukti.url_lihat]);
+
+    useEffect(() => {
+        if (slides.length <= 1) return undefined;
+
+        const timer = window.setInterval(() => {
+            setIndeks((nilai) => (nilai + 1) % slides.length);
+        }, 15000);
+
+        return () => window.clearInterval(timer);
+    }, [slides.length, dimensiAktif]);
+
+    if (!slide) return null;
+
+    return (
+        <Card title={`Program Unggulan / Quick Win Tahun ${new Date().getFullYear()}`}>
+            <div className="overflow-hidden rounded-xl border border-line bg-canvas">
+                <div className="flex flex-wrap items-center justify-center gap-1 border-b border-line bg-white p-2 sm:gap-2 sm:p-3">
+                    {DIMENSI.map((dimensi) => {
+                        const tersedia = dimensiTersedia.includes(dimensi);
+                        const aktif = dimensiAktif === dimensi;
+
+                        return (
+                            <button
+                                key={dimensi}
+                                type="button"
+                                aria-pressed={aktif}
+                                disabled={!tersedia}
+                                className={`rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition sm:px-3 sm:text-xs ${
+                                    aktif
+                                        ? 'bg-river text-white shadow-sm'
+                                        : tersedia
+                                          ? 'text-sub hover:bg-canvas hover:text-river'
+                                          : 'cursor-default text-line/60'
+                                }`}
+                                onClick={() => {
+                                    setDimensiAktif(dimensi);
+                                    setIndeks(0);
+                                }}
+                            >
+                                {dimensi}
+                            </button>
+                        );
+                    })}
+                </div>
+
+                <div className="relative flex min-h-72 items-center justify-center bg-white sm:min-h-[30rem]">
+                    <img
+                        src={slide.bukti.url_lihat}
+                        alt={`Bukti ${slide.judul}`}
+                        className={`max-h-[34rem] w-full object-contain transition-opacity duration-500 ease-in-out ${gambarTerlihat ? 'opacity-100' : 'opacity-0'}`}
+                    />
+                    {slides.length > 1 && (
+                        <>
+                            <button
+                                type="button"
+                                aria-label="Quick Win sebelumnya"
+                                className="absolute left-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/65 p-2.5 text-white shadow-md transition hover:bg-black/80 sm:left-3 sm:p-2"
+                                onClick={() => setIndeks((nilai) => (nilai - 1 + slides.length) % slides.length)}
+                            >
+                                <ChevronLeft size={20} />
+                            </button>
+                            <button
+                                type="button"
+                                aria-label="Quick Win berikutnya"
+                                className="absolute right-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/65 p-2.5 text-white shadow-md transition hover:bg-black/80 sm:right-3 sm:p-2"
+                                onClick={() => setIndeks((nilai) => (nilai + 1) % slides.length)}
+                            >
+                                <ChevronRight size={20} />
+                            </button>
+                        </>
+                    )}
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line bg-white px-4 py-3">
+                    <div className="min-w-0">
+                        <p className="text-xs font-semibold text-river">{slide.dimensi}</p>
+                        <Link to={`/rencana-aksi/${slide.rencana_aksi_uuid}`} className="mt-1 block truncate text-sm font-medium text-ink hover:text-river hover:underline">
+                            {slide.judul}
+                        </Link>
+                        <p className="mt-1 text-[11px] text-sub">{slide.unit}</p>
+                    </div>
+                    {slides.length > 1 && <span className="shrink-0 text-[11px] text-sub">{indeks + 1} / {slides.length}</span>}
+                </div>
+            </div>
+        </Card>
+    );
+}
+
 export default function Dashboard() {
     const daftarTahun = useDaftarTahun();
     const auth = useAuth();
@@ -31,9 +153,11 @@ export default function Dashboard() {
     const tahun = useMemo(() => params.getAll('tahun').map(Number).filter(Boolean), [tahunQuery]);
     const [dinas, setDinas] = useState([]);
     const [kegiatan, setKegiatan] = useState([]);
+    const [quickWins, setQuickWins] = useState([]);
     const [totalKegiatan, setTotalKegiatan] = useState(0);
     const [memuat, setMemuat] = useState(true);
     const [galat, setGalat] = useState(null);
+    const [capaianUnitTerbuka, setCapaianUnitTerbuka] = useState(false);
 
     useEffect(() => {
         let batal = false;
@@ -42,12 +166,13 @@ export default function Dashboard() {
 
         const query = tahun.length ? { tahun } : {};
 
-        Promise.all([api.get('/dinas', { params: query }), ambilSemua('/rencana-aksi', query)])
-            .then(([resDinas, semuaKegiatan]) => {
+        Promise.all([api.get('/dinas', { params: query }), ambilSemua('/rencana-aksi', query), api.get('/quick-wins')])
+            .then(([resDinas, semuaKegiatan, resQuickWins]) => {
                 if (batal) return;
                 setDinas(resDinas.data.data);
                 setKegiatan(semuaKegiatan.data);
                 setTotalKegiatan(semuaKegiatan.total);
+                setQuickWins(resQuickWins.data.data);
             })
             .catch(() => !batal && setGalat('Gagal memuat data dashboard.'))
             .finally(() => !batal && setMemuat(false));
@@ -180,35 +305,55 @@ export default function Dashboard() {
                         </Card>
                     </div>
 
-                    <Card title={`Capaian per Unit / OPD${tahun.length ? ` — ${tahun.join(', ')}` : ''}`}>
-                        {urutUnit.length === 0 ? (
-                            <EmptyState judul="Belum ada kegiatan pada periode ini" keterangan="Coba pilih tahun lain pada filter di atas." />
-                        ) : (
-                            <ul className="divide-y divide-line">
-                                {urutUnit.map((unit) => (
-                                    <li key={unit.id}>
-                                        <Link
-                                            to={auth.sudahLogin ? `/bukti?dinas=${encodeURIComponent(unit.slug)}` : '#'}
-                                            className={`flex items-center gap-3 px-1 py-2.5 transition ${auth.sudahLogin ? 'cursor-pointer hover:bg-canvas' : ''}`}
-                                            onClick={(event) => !auth.sudahLogin && event.preventDefault()}
-                                        >
-                                            <div className="min-w-0 flex-1">
-                                                <p className="truncate text-sm font-medium text-ink">{unit.nama}</p>
-                                                <p className="text-[11px] text-sub">
-                                                    {unit.progres.total} kegiatan · {unit.progres.selesai} selesai · {unit.progres.berjalan} berjalan
-                                                </p>
-                                            </div>
-                                            <div className="hidden w-32 sm:block">
-                                                <ProgressBar nilai={unit.progres.persentase} />
-                                            </div>
-                                            <span className="w-10 text-right text-xs font-semibold text-sub">{unit.progres.persentase}%</span>
-                                            {auth.sudahLogin && <ChevronRight size={14} className="text-sub" />}
-                                        </Link>
-                                    </li>
-                                ))}
-                            </ul>
-                        )}
+                    <Card padding="p-0">
+                        <button
+                            type="button"
+                            className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left"
+                            aria-expanded={capaianUnitTerbuka}
+                            onClick={() => setCapaianUnitTerbuka((terbuka) => !terbuka)}
+                        >
+                            <span className="text-sm font-semibold text-ink">
+                                Capaian per Unit / OPD{tahun.length ? ` — ${tahun.join(', ')}` : ''}
+                            </span>
+                            <ChevronDown
+                                size={16}
+                                className={`shrink-0 text-sub transition-transform ${capaianUnitTerbuka ? 'rotate-180' : ''}`}
+                            />
+                        </button>
+
+                        {capaianUnitTerbuka &&
+                            (urutUnit.length === 0 ? (
+                                <div className="px-4 pb-4">
+                                    <EmptyState judul="Belum ada kegiatan pada periode ini" keterangan="Coba pilih tahun lain pada filter di atas." />
+                                </div>
+                            ) : (
+                                <ul className="divide-y divide-line border-t border-line px-4">
+                                    {urutUnit.map((unit) => (
+                                        <li key={unit.id}>
+                                            <Link
+                                                to={auth.sudahLogin ? `/bukti?dinas=${encodeURIComponent(unit.slug)}` : '#'}
+                                                className={`flex items-center gap-3 px-1 py-2.5 transition ${auth.sudahLogin ? 'cursor-pointer hover:bg-canvas' : ''}`}
+                                                onClick={(event) => !auth.sudahLogin && event.preventDefault()}
+                                            >
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="truncate text-sm font-medium text-ink">{unit.nama}</p>
+                                                    <p className="text-[11px] text-sub">
+                                                        {unit.progres.total} kegiatan · {unit.progres.selesai} selesai · {unit.progres.berjalan} berjalan
+                                                    </p>
+                                                </div>
+                                                <div className="hidden w-32 sm:block">
+                                                    <ProgressBar nilai={unit.progres.persentase} />
+                                                </div>
+                                                <span className="w-10 text-right text-xs font-semibold text-sub">{unit.progres.persentase}%</span>
+                                                {auth.sudahLogin && <ChevronRight size={14} className="text-sub" />}
+                                            </Link>
+                                        </li>
+                                    ))}
+                                </ul>
+                            ))}
                     </Card>
+
+                    {quickWins.length > 0 && <QuickWinSection quickWins={quickWins} />}
                 </>
             )}
         </div>

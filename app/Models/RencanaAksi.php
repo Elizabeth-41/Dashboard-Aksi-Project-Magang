@@ -137,6 +137,11 @@ class RencanaAksi extends Model
         return $this->hasMany(BuktiDukung::class);
     }
 
+    public function quickWins(): HasMany
+    {
+        return $this->hasMany(QuickWin::class);
+    }
+
     /**
      * Bukti yang boleh dilihat publik (Guest).
      */

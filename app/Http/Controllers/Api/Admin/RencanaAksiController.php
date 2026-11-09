@@ -2,15 +2,21 @@
 
 namespace App\Http\Controllers\Api\Admin;
 
+use App\Actions\RencanaAksi\DeleteRencanaAksi;
 use App\Actions\RencanaAksi\LepasBuktiMenunggu;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\ImportRencanaAksiRequest;
 use App\Http\Requests\Admin\StoreRencanaAksiRequest;
 use App\Http\Requests\Admin\UbahVerifikasiMassalRequest;
 use App\Http\Requests\Admin\UpdateRencanaAksiRequest;
 use App\Http\Resources\RencanaAksiResource;
+use App\Imports\RencanaAksiImport;
+use App\Models\QuickWin;
 use App\Models\RencanaAksi;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Tambah/Kelola Kegiatan (khusus Admin Pusat) — kegiatan baru di luar 156 data awal.
@@ -31,20 +37,94 @@ class RencanaAksiController extends Controller
             ->setStatusCode(201);
     }
 
+    public function import(ImportRencanaAksiRequest $request): JsonResponse
+    {
+        $import = new RencanaAksiImport($request->user()->id);
+        $import->importFile($request->file('file')->getRealPath());
+
+        return response()->json([
+            'message' => "{$import->jumlahDiimpor()} kegiatan berhasil diimpor.",
+            'meta' => ['diimpor' => $import->jumlahDiimpor()],
+        ], 201);
+    }
+
     public function update(UpdateRencanaAksiRequest $request, RencanaAksi $rencanaAksi): RencanaAksiResource
     {
-        $rencanaAksi->update($request->payload());
+        $payload = $request->payload();
+        $quickWinTahun = $payload['quick_win_tahun'] ?? null;
+        unset($payload['quick_win_tahun']);
+
+        DB::transaction(function () use ($rencanaAksi, $payload, $quickWinTahun, $request) {
+            $rencanaAksi->update($payload);
+
+            if ($quickWinTahun !== null) {
+                $this->syncQuickWins($rencanaAksi->fresh(), $quickWinTahun, $request->user()->id);
+            }
+        });
 
         $dilepas = $rencanaAksi->wasChanged('perlu_verifikasi') && ! $rencanaAksi->perlu_verifikasi
             ? $this->lepasBukti->handle($rencanaAksi, $request->user())
             : 0;
 
-        return RencanaAksiResource::make($rencanaAksi->load('dinas'))->additional([
+        return RencanaAksiResource::make($rencanaAksi->load(['dinas', 'quickWins']))->additional([
             'message' => $dilepas > 0
                 ? "Kegiatan diperbarui. {$dilepas} bukti yang masih menunggu langsung diterima."
                 : 'Kegiatan diperbarui.',
             'meta' => ['bukti_dilepas' => $dilepas],
         ]);
+    }
+
+    public function destroy(RencanaAksi $rencanaAksi, DeleteRencanaAksi $delete): JsonResponse
+    {
+        Gate::forUser(request()->user())->authorize('delete', $rencanaAksi);
+        $delete->handle($rencanaAksi);
+
+        return response()->json([
+            'message' => 'Kegiatan dan seluruh bukti pendukungnya berhasil dihapus.',
+        ]);
+    }
+
+    /**
+     * @param  array<int, int>  $tahun
+     */
+    private function syncQuickWins(RencanaAksi $rencanaAksi, array $tahun, int $adminId): void
+    {
+        $tahun = array_values(array_unique($tahun));
+        $periode = $rencanaAksi->tahun_pelaksanaan;
+        $invalid = array_diff($tahun, $periode);
+
+        if ($invalid !== []) {
+            throw ValidationException::withMessages([
+                'quick_win_tahun' => 'Quick Win hanya dapat ditetapkan pada tahun pelaksanaan kegiatan.',
+            ]);
+        }
+
+        foreach ($tahun as $nilaiTahun) {
+            $sudahAda = RencanaAksi::query()
+                ->where('dimensi', $rencanaAksi->dimensi)
+                ->where('id', '!=', $rencanaAksi->id)
+                ->whereHas('quickWins', fn ($query) => $query->where('tahun', $nilaiTahun))
+                ->exists();
+
+            if ($sudahAda) {
+                throw ValidationException::withMessages([
+                    'quick_win_tahun' => "Dimensi {$rencanaAksi->dimensi->value} untuk tahun {$nilaiTahun} sudah memiliki Quick Win.",
+                ]);
+            }
+
+            $jumlah = QuickWin::query()->where('tahun', $nilaiTahun)->where('rencana_aksi_id', '!=', $rencanaAksi->id)->count();
+            if ($jumlah >= 6) {
+                throw ValidationException::withMessages([
+                    'quick_win_tahun' => "Quick Win tahun {$nilaiTahun} sudah mencapai batas maksimal 6 kegiatan.",
+                ]);
+            }
+        }
+
+        $rencanaAksi->quickWins()->delete();
+        $rencanaAksi->quickWins()->createMany(array_map(
+            fn (int $tahun) => ['tahun' => $tahun, 'created_by' => $adminId],
+            $tahun,
+        ));
     }
 
     /**

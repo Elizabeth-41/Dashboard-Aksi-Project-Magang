@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\DinasController;
 use App\Http\Controllers\Api\DinasRencanaAksiController;
 use App\Http\Controllers\Api\LaporanController;
 use App\Http\Controllers\Api\NotifikasiController;
+use App\Http\Controllers\Api\QuickWinController;
 use App\Http\Controllers\Api\RencanaAksiBuktiController;
 use App\Http\Controllers\Api\RencanaAksiController;
 use App\Http\Controllers\Api\RentangTahunController;
@@ -35,6 +36,7 @@ Route::name('api.')->group(function () {
 
     Route::get('/rencana-aksi', [RencanaAksiController::class, 'index'])->name('rencana-aksi.index');
     Route::get('/rentang-tahun', RentangTahunController::class)->name('rentang-tahun');
+    Route::get('/quick-wins', QuickWinController::class)->name('quick-wins');
     // Unduh & lihat file bukti ada di routes/web.php (navigasi browser, bukan XHR).
 });
 
@@ -74,6 +76,8 @@ Route::middleware(['auth:sanctum', 'whitelisted', '2fa'])->name('api.')->group(f
         Route::apiResource('allowed-users', AllowedUserController::class);
         Route::get('/activity-log', ActivityLogController::class)->name('activity-log');
         Route::post('/rencana-aksi', [AdminRencanaAksiController::class, 'store'])->name('rencana-aksi.store');
+        Route::post('/rencana-aksi/import', [AdminRencanaAksiController::class, 'import'])->middleware('throttle:unggah')->name('rencana-aksi.import');
+        Route::delete('/rencana-aksi/{rencana_aksi}', [AdminRencanaAksiController::class, 'destroy'])->whereUuid('rencana_aksi')->name('rencana-aksi.destroy');
         Route::patch('/rencana-aksi/verifikasi-massal', [AdminRencanaAksiController::class, 'ubahVerifikasiMassal'])->name('rencana-aksi.verifikasi-massal');
         Route::patch('/rencana-aksi/{rencana_aksi}', [AdminRencanaAksiController::class, 'update'])->whereUuid('rencana_aksi')->name('rencana-aksi.update');
     });

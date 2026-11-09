@@ -21,7 +21,7 @@ class RencanaAksiController extends Controller
 
         $rencanaAksi = RencanaAksi::query()
             ->saring($filter)
-            ->with('dinas')
+            ->with(['dinas', 'quickWins'])
             ->withCount(['buktiDukung', 'buktiDiterima'])
             ->orderBy('dimensi')
             ->orderBy('judul')
@@ -46,7 +46,7 @@ class RencanaAksiController extends Controller
 
     public function show(RencanaAksi $rencanaAksi): RencanaAksiResource
     {
-        $rencanaAksi->load(['dinas', 'creator'])->loadCount(['buktiDukung', 'buktiDiterima']);
+        $rencanaAksi->load(['dinas', 'creator', 'quickWins'])->loadCount(['buktiDukung', 'buktiDiterima']);
 
         return RencanaAksiResource::make($rencanaAksi);
     }

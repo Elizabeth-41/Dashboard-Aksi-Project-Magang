@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Pencil, Plus, RotateCcw, Search, X } from 'lucide-react';
+import { FileSpreadsheet, Pencil, Plus, RotateCcw, Search, Trash2, X } from 'lucide-react';
 import api, { errorValidasi, pesanError, siapkanCsrf } from '../lib/api';
 import {
     DIMENSI,
@@ -40,9 +40,10 @@ const FORM_KOSONG = {
     status: 'belum_mulai',
     perlu_verifikasi: true,
     tahun_pelaksanaan: [],
+    quick_win_tahun: [],
 };
 
-const FILTER_KOSONG = { q: '', dinas: '' };
+const FILTER_KOSONG = { q: '', dinas: '', dimensi: '' };
 
 export default function KelolaKegiatan() {
     const dinasList = useDaftarDinas();
@@ -58,8 +59,11 @@ export default function KelolaKegiatan() {
     const [galatField, setGalatField] = useState({});
     const [pesanSukses, setPesanSukses] = useState(null);
     const [mengirim, setMengirim] = useState(false);
+    const [mengimpor, setMengimpor] = useState(false);
+    const [menghapus, setMenghapus] = useState(null);
     const [mengubahMassal, setMengubahMassal] = useState(false);
     const kotakCentang = useRef(null);
+    const inputExcel = useRef(null);
     const pilihanTahun = [...new Set([...PILIHAN_TAHUN, ...form.tahun_pelaksanaan])].sort((a, b) => b - a);
 
     const filterAktif = useMemo(() => Object.fromEntries(Object.entries(filter).filter(([, nilai]) => nilai)), [filter]);
@@ -146,6 +150,7 @@ export default function KelolaKegiatan() {
             status: kegiatan.status,
             perlu_verifikasi: kegiatan.perlu_verifikasi ?? true,
             tahun_pelaksanaan: kegiatan.tahun_pelaksanaan.map(Number),
+            quick_win_tahun: (kegiatan.quick_win_tahun ?? []).map(Number),
         });
         setGalatField({});
         setFormTerbuka(true);
@@ -157,12 +162,13 @@ export default function KelolaKegiatan() {
         setGalat(null);
         setGalatField({});
 
-        const { tahun_pelaksanaan, ...isian } = form;
+        const { tahun_pelaksanaan, quick_win_tahun, ...isian } = form;
         const payload = {
             ...isian,
             dinas_id: Number(form.dinas_id),
             program: form.program || null,
             tahun_pelaksanaan,
+            ...(sedangUbah ? { quick_win_tahun } : {}),
         };
 
         // Mematikan verifikasi akan melepas bukti yang masih menunggu, jadi
@@ -197,6 +203,51 @@ export default function KelolaKegiatan() {
         }
     };
 
+    const importExcel = async (e) => {
+        const file = e.target.files?.[0];
+        e.target.value = '';
+
+        if (!file) return;
+
+        setMengimpor(true);
+        setGalat(null);
+        setPesanSukses(null);
+
+        try {
+            await siapkanCsrf();
+            const formData = new FormData();
+            formData.append('file', file);
+            const { data } = await api.post('/admin/rencana-aksi/import', formData);
+            setPesanSukses(data.message);
+            muat();
+        } catch (error) {
+            setGalat(pesanError(error, 'Gagal mengimpor file Excel.'));
+        } finally {
+            setMengimpor(false);
+        }
+    };
+
+    const hapus = async (kegiatan) => {
+        if (!window.confirm(`Hapus kegiatan "${kegiatan.judul}" beserta seluruh bukti pendukungnya? Tindakan ini tidak dapat dibatalkan.`)) {
+            return;
+        }
+
+        setMenghapus(kegiatan.uuid);
+        setGalat(null);
+        setPesanSukses(null);
+
+        try {
+            await siapkanCsrf();
+            const { data } = await api.delete(`/admin/rencana-aksi/${kegiatan.uuid}`);
+            setPesanSukses(data.message);
+            await muat();
+        } catch (error) {
+            setGalat(pesanError(error, 'Gagal menghapus kegiatan.'));
+        } finally {
+            setMenghapus(null);
+        }
+    };
+
     return (
         <div className="space-y-4">
             <div className="flex flex-wrap items-end justify-between gap-3">
@@ -204,9 +255,15 @@ export default function KelolaKegiatan() {
                     <h1 className="text-xl font-semibold text-ink">Kelola Kegiatan</h1>
                     <p className="text-sm text-sub">Tambah dan ubah rencana aksi, serta atur kewajiban verifikasi buktinya.</p>
                 </div>
-                <Button onClick={bukaTambah}>
-                    <Plus size={14} /> Tambah kegiatan
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                    <input ref={inputExcel} type="file" accept=".xlsx,.xls" className="hidden" onChange={importExcel} />
+                    <Button varian="outline" onClick={() => inputExcel.current?.click()} memuat={mengimpor}>
+                        <FileSpreadsheet size={14} /> Import Excel
+                    </Button>
+                    <Button onClick={bukaTambah}>
+                        <Plus size={14} /> Tambah kegiatan
+                    </Button>
+                </div>
             </div>
 
             {galat && <Alert jenis="galat">{galat}</Alert>}
@@ -322,6 +379,35 @@ export default function KelolaKegiatan() {
                                     </label>
                                 ))}
                             </div>
+
+                            {sedangUbah && (
+                                <div className="sm:col-span-2">
+                                <span className="mb-1 block text-xs font-medium text-sub">Program unggulan / Quick Win</span>
+                                <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+                                    {form.tahun_pelaksanaan.map((tahun) => (
+                                        <label key={tahun} className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-line px-2 py-2 text-xs text-ink hover:bg-canvas">
+                                            <input
+                                                type="checkbox"
+                                                checked={form.quick_win_tahun.includes(tahun)}
+                                                onChange={() =>
+                                                    setForm({
+                                                        ...form,
+                                                        quick_win_tahun: form.quick_win_tahun.includes(tahun)
+                                                            ? form.quick_win_tahun.filter((nilai) => nilai !== tahun)
+                                                            : [...form.quick_win_tahun, tahun].sort((a, b) => a - b),
+                                                    })
+                                                }
+                                            />
+                                            Quick Win {tahun}
+                                        </label>
+                                    ))}
+                                </div>
+                                <span className="mt-1 block text-[11px] text-sub">
+                                    Pilihan hanya berlaku untuk tahun kegiatan. Maksimal satu Quick Win per dimensi setiap tahun.
+                                </span>
+                                {galatField.quick_win_tahun && <span className="mt-1 block text-[11px] font-medium text-danger">{galatField.quick_win_tahun}</span>}
+                                </div>
+                            )}
                             {galatField.tahun_pelaksanaan ? (
                                 <span className="mt-1 block text-[11px] font-medium text-danger">{galatField.tahun_pelaksanaan}</span>
                             ) : (
@@ -366,7 +452,7 @@ export default function KelolaKegiatan() {
                         </span>
                     </label>
 
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,16rem)_auto]">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,16rem)_minmax(0,16rem)_auto]">
                         <div className="relative">
                             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-sub" />
                             <Input
@@ -387,6 +473,15 @@ export default function KelolaKegiatan() {
                             {dinasList.map((d) => (
                                 <option key={d.id} value={d.slug}>
                                     {d.nama}
+                                </option>
+                            ))}
+                        </Select>
+
+                        <Select aria-label="Filter dimensi" value={filter.dimensi} onChange={(e) => ubahFilter('dimensi', e.target.value)}>
+                            <option value="">Semua dimensi</option>
+                            {DIMENSI.map((dimensi) => (
+                                <option key={dimensi} value={dimensi}>
+                                    {dimensi}
                                 </option>
                             ))}
                         </Select>
@@ -432,6 +527,9 @@ export default function KelolaKegiatan() {
 
                                 <Button ukuran="sm" varian="outline" onClick={() => bukaUbah(kegiatan)}>
                                     <Pencil size={12} /> Ubah
+                                </Button>
+                                <Button ukuran="sm" varian="danger" onClick={() => hapus(kegiatan)} disabled={menghapus === kegiatan.uuid}>
+                                    <Trash2 size={12} /> Hapus
                                 </Button>
                             </li>
                         ))}

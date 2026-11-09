@@ -36,6 +36,7 @@ class RencanaAksiResource extends JsonResource
             'status' => $this->status->value,
             'status_label' => $this->status->label(),
             'perlu_verifikasi' => $this->perlu_verifikasi,
+            'quick_win_tahun' => $this->whenLoaded('quickWins', fn () => $this->quickWins->pluck('tahun')->values()->all()),
             'jumlah_bukti' => $this->whenCounted('buktiDukung'),
             'jumlah_bukti_diterima' => $this->whenCounted('buktiDiterima'),
             'bukti' => BuktiDukungResource::collection($this->whenLoaded('buktiDukung')),

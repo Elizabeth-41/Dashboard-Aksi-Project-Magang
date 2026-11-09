@@ -5,6 +5,7 @@ namespace Tests\Feature\Admin;
 use App\Enums\StatusVerifikasi;
 use App\Models\BuktiDukung;
 use App\Models\Dinas;
+use App\Models\QuickWin;
 use App\Models\RencanaAksi;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Activitylog\Models\Activity;
@@ -143,6 +144,31 @@ class KelolaKegiatanTest extends TestCase
             ->patchJson("/api/admin/rencana-aksi/{$rencana->uuid}", ['judul' => 'Judul baru'])
             ->assertOk()
             ->assertJsonPath('data.judul', 'Judul baru');
+    }
+
+    public function test_admin_can_assign_quick_win_per_year(): void
+    {
+        $admin = $this->adminPusatUser();
+        $rencana = RencanaAksi::factory()->tahun([2026, 2027])->create();
+
+        $this->actingAs($admin)->patchJson("/api/admin/rencana-aksi/{$rencana->uuid}", [
+            'quick_win_tahun' => [2026],
+        ])->assertOk()
+            ->assertJsonPath('data.quick_win_tahun.0', 2026);
+
+        $this->assertDatabaseHas('quick_wins', ['rencana_aksi_id' => $rencana->id, 'tahun' => 2026]);
+    }
+
+    public function test_quick_win_rejects_duplicate_dimension_and_year(): void
+    {
+        $admin = $this->adminPusatUser();
+        $existing = RencanaAksi::factory()->tahun([2026])->create(['dimensi' => 'Smart Governance']);
+        QuickWin::create(['rencana_aksi_id' => $existing->id, 'tahun' => 2026]);
+        $candidate = RencanaAksi::factory()->tahun([2026])->create(['dimensi' => 'Smart Governance']);
+
+        $this->actingAs($admin)->patchJson("/api/admin/rencana-aksi/{$candidate->uuid}", [
+            'quick_win_tahun' => [2026],
+        ])->assertUnprocessable()->assertJsonValidationErrors(['quick_win_tahun']);
     }
 
     public function test_year_range_follows_data_including_future_periods(): void
